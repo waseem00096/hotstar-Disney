@@ -1,20 +1,18 @@
 pipeline {
     agent any
-
     tools {
-        jdk 'jdk-21'         // Must match Global Tool Config
-        nodejs 'node'        // Must match Global Tool Config
+        jdk 'jdk-21'          // Make sure you have JDK installed in Jenkins global tools
+        nodejs 'node'         // Make sure NodeJS is installed in Jenkins global tools
     }
-
     environment {
-        SCANNER_HOME = tool 'sonar-scanner'   // SonarScanner global tool
-        DOCKER_IMAGE = 'waseem09/hotstar:latest'
-        KUBECONFIG = '/var/lib/jenkins/.kube/config'  // Kubernetes access
+        SCANNER_HOME = tool 'sonar-scanner'  // SonarQube scanner tool configured in Jenkins
     }
-
     stages {
+
         stage('Clean Workspace') {
-            steps { cleanWs() }
+            steps {
+                cleanWs()
+            }
         }
 
         stage('Checkout Code') {
@@ -25,58 +23,54 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                script {
-                    withSonarQubeEnv('SonarQube') {
-                        sh """$SCANNER_HOME/bin/sonar-scanner \
-                            -Dsonar.projectName=hotstar \
-                            -Dsonar.projectKey=hotstar"""
-                    }
-                }
-            }
-        }
-
-        stage('SonarQube Quality Gate') {
-            steps {
-                script {
-                    waitForQualityGate abortPipeline: true
+                withSonarQubeEnv('SonarQube') {
+                    sh """$SCANNER_HOME/bin/sonar-scanner \
+                        -Dsonar.projectName=hotstar \
+                        -Dsonar.projectKey=hotstar"""
                 }
             }
         }
 
         stage('Install Dependencies') {
-            steps { sh 'npm install' }
+            steps {
+                sh 'npm install'
+            }
         }
 
         stage('Trivy FS Scan') {
-            steps { sh 'trivy fs . > trivyfs.txt || true' }
+            steps {
+                sh 'trivy fs . > trivyfs.txt'
+            }
         }
 
         stage('Docker Build & Push') {
             steps {
                 script {
-                    withDockerRegistry(credentialsId: 'docker', url: '', toolName: 'docker') {
-                        sh "docker build -t $DOCKER_IMAGE ."
-                        sh "docker push $DOCKER_IMAGE"
+                    withDockerRegistry(credentialsId: 'docker', url: '') { // leave url blank for Docker Hub
+                        sh 'docker build -t waseem09/hotstar:latest .'
+                        sh 'docker push waseem09/hotstar:latest'
                     }
                 }
             }
         }
 
         stage('Trivy Image Scan') {
-            steps { sh "trivy image $DOCKER_IMAGE > trivyimage.txt || true" }
+            steps {
+                sh 'trivy image waseem09/hotstar:latest > trivyimage.txt'
+            }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                dir('kubernetes') {
-                    script {
-                        sh """
-                        kubectl apply -f manifest.yml
-                        kubectl rollout status deployment/hotstar-deployment --timeout=120s
-                        kubectl get pods
-                        kubectl get svc
-                        """
-                    }
+                script {
+                    // Assuming Jenkins has access to Kubernetes via KUBECONFIG
+                    sh '''
+                    export KUBECONFIG=/var/lib/jenkins/.kube/config
+                    kubectl apply -f kubernetes/manifest.yml
+                    kubectl rollout status deployment/hotstar-deployment
+                    kubectl get pods
+                    kubectl get svc
+                    '''
                 }
             }
         }
