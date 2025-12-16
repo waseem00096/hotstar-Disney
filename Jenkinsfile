@@ -96,6 +96,7 @@ pipeline {
 
         stage('Trigger ArgoCD Sync') {
             steps {
+                // Ensure you add 'argocd-password' as Secret Text in Jenkins first!
                 withCredentials([string(credentialsId: 'argocd-password', variable: 'ARGO_PASS')]) {
                     sh """
                         argocd login ${ARGOCD_SERVER} --username ${ARGOCD_USER} --password ${ARGO_PASS} --insecure
@@ -104,21 +105,10 @@ pipeline {
                 }
             }
         }
-
-        // MOVED INSIDE THE STAGES BLOCK
-        stage('Expose Application') {
-            steps {
-                sh """
-                    # Note: port-forwarding in background is unstable in Jenkins
-                    # Ensure /etc/kubernetes/admin.conf is accessible to Jenkins user if using kubeconfig
-                    nohup kubectl port-forward --address 0.0.0.0 svc/hotstar-service 8081:3000 -n jenkins > pf.log 2>&1 &
-                """
-            }
-        }
     }
 
     post {
-        success { echo 'Pipeline completed successfully and deployed via Argo CD!' }
-        failure { echo 'Pipeline failed. Check the logs for details.' }
+        success { echo 'Pipeline completed and ArgoCD synchronized successfully!' }
+        failure { echo 'Pipeline failed. Check Jenkins logs for details.' }
     }
 }
