@@ -78,17 +78,17 @@ pipeline{
         stage('Docker Build') {
             steps {
                 script {
-                    withDockerRegistry(credentialsId: '30a2e9b9-a57c-417a-8e14-dd7e74745fb9', toolName: 'docker') {
+                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
                         sh "docker build -t hotstar ."
-                        sh "docker tag hotstar gashok13193/test:latest"
-                        sh "docker push gashok13193/test:latest"
+                        sh "docker tag waseem09/hotstar:latest"
+                        sh "docker push waseem09/hotstar:latest"
         stage("Docker Build & Push"){
             steps{
                 script{
                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){   
                        sh "docker build -t hotstar ."
-                       sh "docker tag hotstar aseemakram19/hotstar:latest "
-                       sh "docker push aseemakram19/hotstar:latest "
+                       sh "docker tag hotstar waseem09/hotstar:latest "
+                       sh "docker push waseem09/hotstar:latest "
                     }
                 }
             }
@@ -97,19 +97,19 @@ pipeline{
         stage('Trivy Image Scan') {
             steps {
                 script {
-                    sh 'trivy image --severity HIGH,CRITICAL gashok13193/test:latest --format table --output trivy-image-report.txt'
+                    sh 'trivy image --severity HIGH,CRITICAL waseem09/hotstar:latest --format table --output trivy-image-report.txt'
                 }
         stage("TRIVY"){
             steps{
-                sh "trivy image aseemakram19/hotstar:latest > trivyimage.txt" 
+                sh "trivy image waseem09/hotstar:latest > trivyimage.txt" 
             }
         }
 
         stage('Deploy Docker') {
             steps {
-                sh "docker run --rm -d --name hotstar -p ${PORT}:3000 gashok13193/test:latest"
+                sh "docker run --rm -d --name hotstar -p ${PORT}:3000 waseem09/hotstar:latest"
         stage('Deploy to container'){
             steps{
-                sh 'docker run -d --name hotstar -p 3000:3000 aseemakram19/hotstar:latest'
+                sh 'docker run -d --name hotstar -p 3000:3000 waseem09/hotstar:latest'
             }
         }
