@@ -8,8 +8,6 @@ pipeline {
         SCANNER_HOME = tool 'sonar-scanner'
         IMAGE_NAME = 'waseem09/hotstar:latest'
         GITOPS_REPO = '/tmp/gitops-repo'
-        
-        // Use the NodePort (30187) identified from your master node
         ARGOCD_SERVER = '172.16.18.170:30187' 
         ARGOCD_APP = 'hotstar-app'
         ARGOCD_USER = 'admin'
@@ -70,7 +68,6 @@ pipeline {
         stage('Update GitOps Repo') {
             steps {
                 script {
-                    // Pulls both username and password from the same credential ID
                     withCredentials([usernamePassword(
                         credentialsId: 'gitops-credentials',
                         usernameVariable: 'GIT_USER',
@@ -99,7 +96,6 @@ pipeline {
 
         stage('Trigger ArgoCD Sync') {
             steps {
-                // Securely fetches the ArgoCD password from Jenkins Secret Text
                 withCredentials([string(credentialsId: 'argocd-password', variable: 'ARGO_PASS')]) {
                     sh """
                         argocd login ${ARGOCD_SERVER} --username ${ARGOCD_USER} --password ${ARGO_PASS} --insecure
@@ -108,18 +104,19 @@ pipeline {
                 }
             }
         }
+
+        // MOVED INSIDE THE STAGES BLOCK
+        stage('Expose Application') {
+            steps {
+                sh """
+                    # Note: port-forwarding in background is unstable in Jenkins
+                    # Ensure /etc/kubernetes/admin.conf is accessible to Jenkins user if using kubeconfig
+                    nohup kubectl port-forward --address 0.0.0.0 svc/hotstar-service 8081:3000 -n jenkins > pf.log 2>&1 &
+                """
+            }
+        }
     }
 
-    stage('Expose Application') {
-    steps {
-        sh """
-            # Use --kubeconfig if running on a separate Jenkins server
-            # The 'nohup' and '&' allow it to run in the background
-            nohup kubectl port-forward --address 0.0.0.0 svc/hotstar-service 8081:3000 -n jenkins > pf.log 2>&1 &
-        """
-    }
-}
-    
     post {
         success { echo 'Pipeline completed successfully and deployed via Argo CD!' }
         failure { echo 'Pipeline failed. Check the logs for details.' }
