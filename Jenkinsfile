@@ -67,28 +67,38 @@ pipeline {
             steps { sh "trivy image --severity HIGH,CRITICAL ${IMAGE_NAME} --format table --output trivy-image-report.txt" }
         }
 
-        stage('Update GitOps Repo') {
-            steps {
-                script {
-                    // Clone GitOps repo
-                    sh "rm -rf ${GITOPS_REPO} && git clone https://github.com/your-org/gitops-repo.git ${GITOPS_REPO}"
-                    
-                    // Update manifest with new image
-                    sh "sed -i 's|image: .*|image: ${IMAGE_NAME}|' ${GITOPS_REPO}/K8S/manifest.yml"
-                    
-                    // Commit & push changes
-                    dir("${GITOPS_REPO}") {
-                        sh """
-                            git config user.email "jenkins@example.com"
-                            git config user.name "Jenkins"
-                            git add .
-                            git commit -m "Update Hotstar image to ${IMAGE_NAME}"
-                            git push origin main
-                        """
-                    }
+       stage('Update GitOps Repo') {
+    steps {
+        script {
+            withCredentials([usernamePassword(
+                credentialsId: 'gitops-credentials',
+                usernameVariable: 'GIT_USER',
+                passwordVariable: 'GIT_TOKEN'
+            )]) {
+                // Clone using HTTPS with credentials
+                sh """
+                    rm -rf ${GITOPS_REPO}
+                    git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/your-org/gitops-repo.git ${GITOPS_REPO}
+                """
+
+                // Update manifest with new image
+                sh "sed -i 's|image: .*|image: ${IMAGE_NAME}|' ${GITOPS_REPO}/K8S/manifest.yml"
+
+                // Commit & push changes
+                dir("${GITOPS_REPO}") {
+                    sh """
+                        git config user.email "jenkins@example.com"
+                        git config user.name "Jenkins"
+                        git add .
+                        git commit -m "Update Hotstar image to ${IMAGE_NAME}"
+                        git push origin main
+                    """
                 }
             }
         }
+    }
+}
+
 
         stage('Trigger ArgoCD Sync') {
             steps {
