@@ -110,6 +110,16 @@ pipeline {
         }
     }
 
+    stage('Expose Application') {
+    steps {
+        sh """
+            # Use --kubeconfig if running on a separate Jenkins server
+            # The 'nohup' and '&' allow it to run in the background
+            nohup kubectl port-forward --address 0.0.0.0 svc/hotstar-service 8081:3000 -n jenkins > pf.log 2>&1 &
+        """
+    }
+}
+    
     post {
         success { echo 'Pipeline completed successfully and deployed via Argo CD!' }
         failure { echo 'Pipeline failed. Check the logs for details.' }
