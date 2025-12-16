@@ -26,9 +26,10 @@ kind: Service
 metadata:
   name: hotstar-service
 spec:
-  type: LoadBalancer
+  type: NodePort  # Changed from LoadBalancer for bare-metal/VM setup
   selector:
     app: hotstar
   ports:
-  - port: 80
-    targetPort: 3000
+    - port: 8081       # Internal Cluster Port
+      targetPort: 3000 # Your React App Port
+      nodePort: 32000  # External Port accessible at http://172.16.18.170:32000
