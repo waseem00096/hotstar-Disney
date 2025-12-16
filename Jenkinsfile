@@ -74,10 +74,10 @@ pipeline {
 
        stage('Deploy to Kubernetes') {
             steps {
-                sh """
-                kubectl -n jenkins set image deployment/hotstar-deployment \
-                    hotstar-container=waseem09/hotstar:latest --record
-               """
+                withEnv(["KUBECONFIG=/var/lib/jenkins/.kube/config"]) {
+                    sh "kubectl apply -f manifest.yml -n jenkins"
+                    sh "kubectl set image deployment/hotstar-deployment hotstar-container=waseem09/hotstar:latest -n jenkins"
+        }
     }
 }
 
