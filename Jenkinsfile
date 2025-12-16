@@ -74,18 +74,21 @@ pipeline {
             }
         }
 
-       stage('Deploy to Kubernetes') {
-            steps {
-                script {
-                    // Deploy manifest using Jenkins Kubernetes plugin (kubernetesApply)
-                    kubernetesApply(
-                        configs: 'K8S/manifest.yml',
-                        kubeconfigId: 'jenkins-sa-token',  // Jenkins credential with service account token
-                        namespace: "${K8S_NAMESPACE}"
+      stage('Deploy to Kubernetes') {
+           steps {
+              script {
+            // Deploy manifest using Jenkins Kubernetes plugin (kubernetesApply)
+                   kubernetesApply(
+                    target: 'K8S/manifest.yml',           // path to manifest
+                    credentialsId: 'jenkins-sa-token',    // Jenkins credential with service account token
+                    namespace: "${K8S_NAMESPACE}",
+                    targetEnvironment: 'dev',             // avoid "Supply target environment" error
+                    enableConfigSubstitution: true,
+                    verbose: true
             )
 
-                // Update the image directly after deployment
-                    sh "kubectl set image deployment/hotstar-deployment hotstar-container=${IMAGE_NAME} -n ${K8S_NAMESPACE}"
+            // Update the image directly after deployment
+            sh "kubectl set image deployment/hotstar-deployment hotstar-container=${IMAGE_NAME} -n ${K8S_NAMESPACE}"
         }
     }
 }
