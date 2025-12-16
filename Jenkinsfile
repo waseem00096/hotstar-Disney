@@ -72,10 +72,14 @@ pipeline {
             }
         }
 
-        stage('Deploy to Kubernetes') {
+       stage('Deploy to Kubernetes') {
             steps {
-                sh "kubectl apply -f k8s-deployment.yaml"
-            }
-        }
+                sh """
+                kubectl -n jenkins set image deployment/hotstar-deployment \
+                    hotstar-container=waseem09/hotstar:latest --record
+               """
+    }
+}
+
     }
 }
