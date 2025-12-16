@@ -75,29 +75,34 @@ pipeline {
                 usernameVariable: 'GIT_USER',
                 passwordVariable: 'GIT_TOKEN'
             )]) {
-                // Clone using HTTPS with credentials
+                // Set GitOps repo path
+                def repoPath = "${env.WORKSPACE}/gitops-repo"
+
                 sh """
-                    rm -rf ${GITOPS_REPO}
-                    git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/your-org/gitops-repo.git ${GITOPS_REPO}
-                """
-
-                // Update manifest with new image
-                sh "sed -i 's|image: .*|image: ${IMAGE_NAME}|' ${GITOPS_REPO}/K8S/manifest.yml"
-
-                // Commit & push changes
-                dir("${GITOPS_REPO}") {
-                    sh """
-                        git config user.email "jenkins@example.com"
-                        git config user.name "Jenkins"
+                    rm -rf ${repoPath}
+                    git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/waseem00096/hotstar-gitops.git ${repoPath}
+                    
+                    # Update manifest with new image
+                    sed -i 's|image: .*|image: ${IMAGE_NAME}|' ${repoPath}/K8S/manifest.yml
+                    
+                    cd ${repoPath}
+                    git config user.email "jenkins@example.com"
+                    git config user.name "Jenkins"
+                    
+                    # Commit only if there are changes
+                    if ! git diff --quiet; then
                         git add .
                         git commit -m "Update Hotstar image to ${IMAGE_NAME}"
                         git push origin main
-                    """
-                }
+                    else
+                        echo "No changes to commit"
+                    fi
+                """
             }
         }
     }
 }
+
 
 
         stage('Trigger ArgoCD Sync') {
