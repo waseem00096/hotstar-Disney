@@ -74,27 +74,22 @@ pipeline {
             }
         }
 
-        stage('Deploy to Kubernetes') {
+       stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    // Using Jenkins Kubernetes plugin to deploy without kubeconfig
-                    kubernetesDeploy(
+                    // Deploy manifest using Jenkins Kubernetes plugin (kubernetesApply)
+                    kubernetesApply(
                         configs: 'K8S/manifest.yml',
-                        kubeConfig: '',
-                        kubeConfigCredentials: 'jenkins-sa-token', // Jenkins credential with the jenkins-sa token
-                        enableConfigSubstitution: true,
-                        kubeContext: '',
-                        namespace: "${K8S_NAMESPACE}",
-                        secretName: '',
-                        containerName: 'hotstar-container',
-                        verbose: true
-                    )
-                    
-                    // Update the image directly after deployment
+                        kubeconfigId: 'jenkins-sa-token',  // Jenkins credential with service account token
+                        namespace: "${K8S_NAMESPACE}"
+            )
+
+                // Update the image directly after deployment
                     sh "kubectl set image deployment/hotstar-deployment hotstar-container=${IMAGE_NAME} -n ${K8S_NAMESPACE}"
-                }
-            }
         }
+    }
+}
+
     }
 
     post {
