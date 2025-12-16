@@ -10,6 +10,7 @@ pipeline {
         IMAGE_NAME = 'waseem09/hotstar:latest'
         K8S_NAMESPACE = 'jenkins'
         KUBECONFIG = '/var/lib/jenkins/.kube/config' // path to kubeconfig on Jenkins server
+        SA_NAME = 'jenkins-sa'
     }
 
     stages {
@@ -74,17 +75,48 @@ pipeline {
             }
         }
 
+        stage('Prepare Kubernetes Environment') {
+            steps {
+                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
+                    script {
+                        // Create namespace if it doesn't exist
+                        sh """
+                        if ! kubectl get namespace ${K8S_NAMESPACE} >/dev/null 2>&1; then
+                            echo "Namespace ${K8S_NAMESPACE} does not exist. Creating..."
+                            kubectl create namespace ${K8S_NAMESPACE}
+                        else
+                            echo "Namespace ${K8S_NAMESPACE} already exists."
+                        fi
+                        """
+
+                        // Create service account if it doesn't exist
+                        sh """
+                        if ! kubectl get sa ${SA_NAME} -n ${K8S_NAMESPACE} >/dev/null 2>&1; then
+                            echo "Service account ${SA_NAME} not found. Creating..."
+                            kubectl create sa ${SA_NAME} -n ${K8S_NAMESPACE}
+                            kubectl create clusterrolebinding ${SA_NAME}-binding --clusterrole=cluster-admin --serviceaccount=${K8S_NAMESPACE}:${SA_NAME}
+                        else
+                            echo "Service account ${SA_NAME} already exists."
+                        fi
+                        """
+                    }
+                }
+            }
+        }
+
         stage('Deploy to Kubernetes') {
             steps {
                 withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
-                    // Apply manifests
-                    sh "kubectl apply -f K8S/manifest.yml -n ${K8S_NAMESPACE}"
+                    script {
+                        // Apply manifests
+                        sh "kubectl apply -f K8S/manifest.yml -n ${K8S_NAMESPACE}"
 
-                    // Update deployment image
-                    sh "kubectl set image deployment/hotstar-deployment hotstar-container=${IMAGE_NAME} -n ${K8S_NAMESPACE}"
+                        // Update deployment image
+                        sh "kubectl set image deployment/hotstar-deployment hotstar-container=${IMAGE_NAME} -n ${K8S_NAMESPACE}"
 
-                    // Optional: rollout status to wait for deployment to complete
-                    sh "kubectl rollout status deployment/hotstar-deployment -n ${K8S_NAMESPACE}"
+                        // Wait for rollout to complete
+                        sh "kubectl rollout status deployment/hotstar-deployment -n ${K8S_NAMESPACE}"
+                    }
                 }
             }
         }
