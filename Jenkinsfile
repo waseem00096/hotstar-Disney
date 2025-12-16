@@ -8,6 +8,8 @@ pipeline {
         SCANNER_HOME = tool 'sonar-scanner'
         PORT = '3000'
         IMAGE_NAME = 'waseem09/hotstar:latest'
+        K8S_CLOUD = 'k8s-cluster' // name of your Kubernetes Cloud in Jenkins
+        K8S_NAMESPACE = 'jenkins'
     }
 
     stages {
@@ -27,7 +29,7 @@ pipeline {
             steps {
                 withSonarQubeEnv('SonarQube') {
                     sh """
-                    $SCANNER_HOME/bin/sonar-scanner \
+                        $SCANNER_HOME/bin/sonar-scanner \
                         -Dsonar.projectName=Hotstar \
                         -Dsonar.projectKey=Hotstar \
                         -Dsonar.projectVersion=1.0 \
@@ -39,7 +41,7 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                waitForQualityGate abortPipeline: false, credentialsId: 'sonar-token'
+                waitForQualityGate abortPipeline: true, credentialsId: 'sonar-token'
             }
         }
 
@@ -72,14 +74,35 @@ pipeline {
             }
         }
 
-       stage('Deploy to Kubernetes') {
+        stage('Deploy to Kubernetes') {
             steps {
-                withEnv(["KUBECONFIG=/var/lib/jenkins/.kube/config"]) {
-                    sh "kubectl apply -f K8S/manifest.yml -n jenkins"
-                    sh "kubectl set image deployment/hotstar-deployment hotstar-container=waseem09/hotstar:latest -n jenkins"
+                script {
+                    // Using Jenkins Kubernetes plugin to deploy without kubeconfig
+                    kubernetesDeploy(
+                        configs: 'K8S/manifest.yml',
+                        kubeConfig: '',
+                        kubeConfigCredentials: 'jenkins-sa-token', // Jenkins credential with the jenkins-sa token
+                        enableConfigSubstitution: true,
+                        kubeContext: '',
+                        namespace: "${K8S_NAMESPACE}",
+                        secretName: '',
+                        containerName: 'hotstar-container',
+                        verbose: true
+                    )
+                    
+                    // Update the image directly after deployment
+                    sh "kubectl set image deployment/hotstar-deployment hotstar-container=${IMAGE_NAME} -n ${K8S_NAMESPACE}"
+                }
+            }
         }
     }
-}
 
+    post {
+        success {
+            echo 'Pipeline completed successfully and deployed to Kubernetes!'
+        }
+        failure {
+            echo 'Pipeline failed. Check the logs for details.'
+        }
     }
 }
