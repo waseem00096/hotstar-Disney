@@ -6,18 +6,18 @@ pipeline {
     }
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
-        PORT = '3000'
         IMAGE_NAME = 'waseem09/hotstar:latest'
-        K8S_NAMESPACE = 'jenkins'
-        KUBECONFIG = '/var/lib/jenkins/.kube/config' // path to kubeconfig on Jenkins server
-        SA_NAME = 'jenkins-sa'
+        GITOPS_REPO = '/tmp/gitops-repo'         // local clone of your GitOps repo
+        GITOPS_CREDENTIALS = 'github-token'      // credentials for pushing to GitOps repo
+        ARGOCD_APP = 'hotstar-app'
+        ARGOCD_SERVER = 'argocd-server.local'    // ArgoCD server URL
+        ARGOCD_USER = 'admin'
+        ARGOCD_PASSWORD = 'admin-password'
     }
 
     stages {
         stage('Clean Workspace') {
-            steps {
-                cleanWs()
-            }
+            steps { cleanWs() }
         }
 
         stage('Checkout Code') {
@@ -31,31 +31,25 @@ pipeline {
                 withSonarQubeEnv('SonarQube') {
                     sh """
                         $SCANNER_HOME/bin/sonar-scanner \
-                        -Dsonar.projectName=Hotstar \
-                        -Dsonar.projectKey=Hotstar \
-                        -Dsonar.projectVersion=1.0 \
-                        -Dsonar.sources=.
+                            -Dsonar.projectName=Hotstar \
+                            -Dsonar.projectKey=Hotstar \
+                            -Dsonar.projectVersion=1.0 \
+                            -Dsonar.sources=.
                     """
                 }
             }
         }
 
         stage('Quality Gate') {
-            steps {
-                waitForQualityGate abortPipeline: true, credentialsId: 'sonar-token'
-            }
+            steps { waitForQualityGate abortPipeline: true, credentialsId: 'sonar-token' }
         }
 
         stage('Install Dependencies') {
-            steps {
-                sh 'npm install'
-            }
+            steps { sh 'npm install' }
         }
 
         stage('Trivy FS Scan') {
-            steps {
-                sh 'trivy fs --severity HIGH,CRITICAL ./ --format table --output trivy-fs-report.txt'
-            }
+            steps { sh 'trivy fs --severity HIGH,CRITICAL ./ --format table --output trivy-fs-report.txt' }
         }
 
         stage('Docker Build & Push') {
@@ -70,64 +64,44 @@ pipeline {
         }
 
         stage('Trivy Image Scan') {
-            steps {
-                sh "trivy image --severity HIGH,CRITICAL ${IMAGE_NAME} --format table --output trivy-image-report.txt"
-            }
+            steps { sh "trivy image --severity HIGH,CRITICAL ${IMAGE_NAME} --format table --output trivy-image-report.txt" }
         }
 
-        stage('Prepare Kubernetes Environment') {
+        stage('Update GitOps Repo') {
             steps {
-                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
-                    script {
-                        // Create namespace if it doesn't exist
+                script {
+                    // Clone GitOps repo
+                    sh "rm -rf ${GITOPS_REPO} && git clone https://github.com/your-org/gitops-repo.git ${GITOPS_REPO}"
+                    
+                    // Update manifest with new image
+                    sh "sed -i 's|image: .*|image: ${IMAGE_NAME}|' ${GITOPS_REPO}/K8S/manifest.yml"
+                    
+                    // Commit & push changes
+                    dir("${GITOPS_REPO}") {
                         sh """
-                        if ! kubectl get namespace ${K8S_NAMESPACE} >/dev/null 2>&1; then
-                            echo "Namespace ${K8S_NAMESPACE} does not exist. Creating..."
-                            kubectl create namespace ${K8S_NAMESPACE}
-                        else
-                            echo "Namespace ${K8S_NAMESPACE} already exists."
-                        fi
-                        """
-
-                        // Create service account if it doesn't exist
-                        sh """
-                        if ! kubectl get sa ${SA_NAME} -n ${K8S_NAMESPACE} >/dev/null 2>&1; then
-                            echo "Service account ${SA_NAME} not found. Creating..."
-                            kubectl create sa ${SA_NAME} -n ${K8S_NAMESPACE}
-                            kubectl create clusterrolebinding ${SA_NAME}-binding --clusterrole=cluster-admin --serviceaccount=${K8S_NAMESPACE}:${SA_NAME}
-                        else
-                            echo "Service account ${SA_NAME} already exists."
-                        fi
+                            git config user.email "jenkins@example.com"
+                            git config user.name "Jenkins"
+                            git add .
+                            git commit -m "Update Hotstar image to ${IMAGE_NAME}"
+                            git push origin main
                         """
                     }
                 }
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Trigger ArgoCD Sync') {
             steps {
-                withEnv(["KUBECONFIG=${env.KUBECONFIG}"]) {
-                    script {
-                        // Apply manifests
-                        sh "kubectl apply -f K8S/manifest.yml -n ${K8S_NAMESPACE}"
-
-                        // Update deployment image
-                        sh "kubectl set image deployment/hotstar-deployment hotstar-container=${IMAGE_NAME} -n ${K8S_NAMESPACE}"
-
-                        // Wait for rollout to complete
-                        sh "kubectl rollout status deployment/hotstar-deployment -n ${K8S_NAMESPACE}"
-                    }
-                }
+                sh """
+                    argocd login ${ARGOCD_SERVER} --username ${ARGOCD_USER} --password ${ARGOCD_PASSWORD} --insecure
+                    argocd app sync ${ARGOCD_APP}
+                """
             }
         }
     }
 
     post {
-        success {
-            echo 'Pipeline completed successfully and deployed to Kubernetes!'
-        }
-        failure {
-            echo 'Pipeline failed. Check the logs for details.'
-        }
+        success { echo 'Pipeline completed successfully and deployed via Argo CD!' }
+        failure { echo 'Pipeline failed. Check the logs for details.' }
     }
 }
