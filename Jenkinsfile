@@ -70,13 +70,7 @@ pipeline{
             }
         }
 
-        stage('Docker Build') {
-            steps {
-                script {
-                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh "docker build -t hotstar ."
-                        sh "docker tag waseem09/hotstar:latest"
-                        sh "docker push waseem09/hotstar:latest"
+      
         stage("Docker Build & Push"){
             steps{
                 script{
