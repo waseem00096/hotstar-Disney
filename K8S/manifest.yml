@@ -4,7 +4,7 @@ kind: Deployment
 metadata:
   name: hotstar-deployment
 spec:
-  replicas: 2
+  replicas: 4
   strategy:
     type: RollingUpdate
   selector:
@@ -33,3 +33,4 @@ spec:
     - port: 8081       # Internal Cluster Port
       targetPort: 3000 # Your React App Port
       nodePort: 32000  # External Port accessible at http://172.16.18.170:32000
+
